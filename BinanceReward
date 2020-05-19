@@ -1,7 +1,7 @@
 ###########################VARIABLES################################
 account=cryptolions1
-start_dtg=2019-05-17T00:00:00.782Z
-end_dtg=2020-05-18T00:00:00.782Z
+#start_dtg=2019-05-17T00:00:00.782Z
+#end_dtg=2020-05-18T00:00:00.782Z
 
 timestamp_epoch=946684800
 now="$(date +%s)"
