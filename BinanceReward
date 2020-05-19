@@ -1,17 +1,72 @@
+###########################VARIABLES################################
 account=cryptolions1
-start_dtg=2019-05-12T19:00:00.782Z
-end_dtg=2020-05-13T20:00:00.782Z
-###########################TOTAL_OUR_VOTES##############################################################
-PROD_LIST=$(./cleos.sh system listproducers -l 100 -j | jq -r '.')
-    timestamp_epoch=946684800
-    now="$(date +%s)"
-    let "dates_=$now-$timestamp_epoch"
-    let "weight_=$dates_/(86400*7)"
-    weight=$(bc <<< "scale=16;$weight_/52")
-    res=$(bc -l <<< "e($weight*l(2))")
+start_dtg=2019-05-17T00:00:00.782Z
+end_dtg=2020-05-18T00:00:00.782Z
+
+timestamp_epoch=946684800
+now="$(date +%s)"
+let "dates_=$now-$timestamp_epoch"
+let "weight_=$dates_/(86400*7)"
+weight=$(bc <<< "scale=16; $weight_/52")
+res=$(bc -l <<< "e($weight*l(2))")
+
 VOTE_WEIGHT=$res
-        TOTAL_VOTE_WEIGHT=$(echo $PROD_LIST | jq -r '.total_producer_vote_weight' | cut -f1 -d".")
-        for row in $(echo "${PROD_LIST}" | jq -r '.rows[] | select(.owner == "cryptolions1")  | @base64'); do
+TOTAL_EOS_VOTES_NICE=0
+accountlist=(binanceprox1 binanceprox2 binanceprox3 binanceprox4 binanceprox5 binancevote1 binancevote2 binancevote3 binancevote4 binancevote5 binanceprxy1 binanceprxy2 binanceprxy3 binanceprxy4 binanceprxy5)
+total_final_value=0 
+##########################REQUESTS##################################
+
+claimrewards="$(curl -s http://api.eossweden.org/v2/history/get_actions?account=$account&filter=eosio:claimrewards&after=$steap1&before=$steap2)"
+PROD_LIST=$(./cleos.sh system listproducers -l 100 -j | jq -r '.')
+
+################################START###############################
+
+now_epoch=`(date +%s)`
+steap2=$(date -d @"$now_epoch" +"%Y-%m-%dT%H:%M:%S")
+now="$(date -d @"$now_epoch")"
+before_noww="$(($now_epoch - 86400))"
+before_now="$(($now_epoch - 900))"
+steap1="$(date -d @"$before_noww" +"%Y-%m-%dT%H:%M:%S")"
+LAST_CLAIM_TIME=$(./cleos.sh system listproducers -l 100 -j | jq -r '.rows[] | select(.owner == "'$account'") ')
+last_claim="$(echo $LAST_CLAIM_TIME | jq '.last_claim_time' | tr -d '"')"
+last_claim_epoch="$(date -d $last_claim +%s)"
+
+while true
+do
+
+if (( before_now <= last_claim_epoch && last_claim_epoch <= now_epoch )); then
+
+
+echo "--------$last_claim---------------"  >> temp.txt
+
+##############################CLAIM_REWARD##########################
+
+	  for row in $(echo "${claimrewards}" | jq -r '.actions[] | @base64'); do   
+	                _jq() {
+                	        echo ${row} | base64 --decode | jq -r  ${1}
+                	}
+			a="$(echo $(_jq '.trx_id'))"
+		trx="$(curl -s http://api.eossweden.org/v2/history/get_transaction?id=$a)"
+	        timestamp="$(echo $trx | jq '.actions[]."@timestamp"' | tr -d '"'| tail -1)" 
+		epoch_timestamp="$(date -d  $timestamp +%s)"
+
+	if [ "$timestamp" != "$last_claim" ]; then
+		continue
+	fi
+
+	reward="$(echo $trx | jq '.actions[] | select(.act.data.amount != null) | select(.act.data.from == "eosio.vpay")')"
+	quantity="$(echo $reward | jq '.act.data.amount')"
+
+	if [ ! -z "$quantity" ] ; then
+	q=$quantity
+	fi
+done
+echo "CLAIM REWARD = $q" >> temp.txt
+
+###########################TOTAL_OUR_VOTES#############################
+
+	TOTAL_VOTE_WEIGHT=$(echo $PROD_LIST | jq -r '.total_producer_vote_weight' | cut -f1 -d".")
+        for row in $(echo "${PROD_LIST}" | jq -r '.rows[] | select(.owner == "'$account'")  | @base64'); do
         _jq() {
                 echo ${row} | base64 --decode | jq -r ${1}
         }
@@ -20,22 +75,20 @@ VOTE_WEIGHT=$res
                 PROC=$(bc <<< "scale=3; $TOTAL_VOTES*100/$TOTAL_VOTE_WEIGHT")
                 EOS_VOTES=$(bc <<< "scale=2; $TOTAL_VOTES/$VOTE_WEIGHT/10000")
                 EOS_VOTES_NICE=$(echo $EOS_VOTES | awk '{print ($0-int($0)<0.499)?int($0):int($0)+1}')
-echo "total votes = $EOS_VOTES_NICE VOTES"
+echo "total votes = $EOS_VOTES_NICE VOTES" >> temp.txt
 
         done
-###################################TOTAL_BINANCE_VOTES######################################################
-TOTAL_EOS_VOTES_NICE=0
-accountlist=(binanceprox1 binanceprox2 binanceprox3 binanceprox4 binanceprox5 binancevote1 binancevote2 binancevote3 binancevote4 binancevote5 binanceprxy1 binanceprxy2 binanceprxy3 binanceprxy4 binanceprxy5)
-for i in "${accountlist[@]}"
-do
+
+###########################TOTAL_BINANCE_VOTES#########################
+
+for i in "${accountlist[@]}"; do
 accvote=$(./cleos.sh get account $i  -j | jq '.voter_info')
-VOTE_WEIGHT=$res
 TOTAL_VOTE_WEIGHT=$(echo $accvote | jq -r '.last_vote_weight')
         
-	for row in $(echo "${accvote}" | jq -r '. | select(.producers[] == "cryptolions1") | @base64'); do
-        	_jq() {
-                	echo ${row} | base64 --decode | jq -r ${1}
-        	}
+        for row in $(echo "${accvote}" | jq -r '. | select(.producers[] == "'$account'") | @base64'); do
+                _jq() {
+                        echo ${row} | base64 --decode | jq -r ${1}
+                }
                  NAME=$(_jq '.owner')
                 TOTAL_VOTES=$(_jq '.proxied_vote_weight' | cut -f1 -d".")
                 PROC=$(bc <<< "scale=3; $TOTAL_VOTES*100/$TOTAL_VOTE_WEIGHT")
@@ -43,26 +96,24 @@ TOTAL_VOTE_WEIGHT=$(echo $accvote | jq -r '.last_vote_weight')
                 EOS_VOTES_NICe=$(echo $EOS_VOTES | awk '{print ($0-int($0)<0.499)?int($0):int($0)+1}')
 
 let "TOTAL_EOS_VOTES_NICE=TOTAL_EOS_VOTES_NICE+EOS_VOTES_NICe"
+
 done
 done
-echo "total votes from binance =  $TOTAL_EOS_VOTES_NICE  VOTES"
-################################CLAIM_REWARD###################################################################
-claimrewards="$(curl -s http://api.eossweden.org/v2/history/get_actions?account=$account&filter=eosio:claimrewards&after=$start_dtg&before=$end_dtg)"
-for row in $(echo "${claimrewards}" | jq -r '.actions[] | @base64'); do
-                _jq() {
-                        echo ${row} | base64 --decode | jq -r  ${1}
-                }
-a="$(echo $(_jq '.trx_id'))"
-trx="$(curl -s http://api.eossweden.org/v2/history/get_transaction?id=$a)"
-reward="$(echo $trx | jq '.actions[].act.data | select(.amount != null) | select(.from == "eosio.vpay")')"
-quantity=$(echo ${reward} | jq -r '.amount')
-if [ ! -z "$quantity" ] ; then
-q=$quantity
-fi
-done
+echo "total votes from binance =  $TOTAL_EOS_VOTES_NICE  VOTES" >> temp.txt
+
+#########################TOTAL_PAY_CALCULATION#########################
+
 Proc_bin_votes=$(bc -l <<< "scale=16; $TOTAL_EOS_VOTES_NICE/$EOS_VOTES_NICE")
-#echo $Proc_bin_votes
 Reward_of_Binance=$(bc -l <<< "scale=8; $q*$Proc_bin_votes")
-#echo $Reward_of_Binance
 final_value=$(bc -l <<< "scale=8; $Reward_of_Binance*80/100")
-echo "Pay to Binance $final_value  EOS"
+echo "Pay to Binance $final_value  EOS" >> temp.txt
+
+echo "-----------------------------------------"  >> temp.txt
+total_final_value=$(bc -l  <<< "scale=4; $total_final_value+$final_value ")
+echo " 💰 Total Pay to Binance $total_final_value  EOS 💰" >> temp.txt
+#else
+#  echo "NO"
+
+fi
+  sleep 300
+done &  
